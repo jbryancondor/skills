@@ -17,8 +17,9 @@ mkdir -p ~/.claude/skills
 2. Link each skill using this pattern:
 
 ```bash
-ln -s ~/bcd/project/custom-skills/asana-task-creator-for-marketplace-cancellation ~/.claude/skills/asana-task-creator-for-marketplace-cancellation
-ln -s ~/bcd/project/custom-skills/generating-l3-oncall-report ~/.claude/skills/generating-l3-oncall-report
+ln -s ~/bcd/project/skills/asana-task-creator-for-marketplace-cancellation ~/.claude/skills/asana-task-creator-for-marketplace-cancellation
+ln -s ~/bcd/project/skills/generating-l3-oncall-report ~/.claude/skills/generating-l3-oncall-report
+ln -s ~/bcd/project/skills/daily-status-publisher ~/.claude/skills/daily-status-publisher
 ```
 
 3. Reload your IDE/agent so it re-indexes local skills.
@@ -63,3 +64,15 @@ Supporting docs:
 - `generating-l3-oncall-report/DATA-SOURCES.md`
 - `generating-l3-oncall-report/TEMPLATE.md`
 - `generating-l3-oncall-report/EXAMPLE-OUTPUT.md`
+
+### 3) `daily-status-publisher`
+
+Path: `daily-status-publisher/SKILL.md`
+
+**Purpose:** Generate and post the daily async status update to the team Slack thread.
+
+**Includes:**
+- Fetches tasks from three Asana boards (Merchant Platform Execution, L3 OnCall Merchant Channels, L3 OnCall Merchant Operations).
+- Classifies tasks into: completed yesterday, working today, potential blockers.
+- Drafts all three standup questions and asks for confirmation before posting.
+- Posts as a reply to the daily thread in `#merchant-platform`; asks the user to paste the message link if the thread isn't found automatically.
