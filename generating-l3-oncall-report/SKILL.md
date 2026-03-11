@@ -7,8 +7,8 @@ description: Creates the weekly L3 on-call handoff report in the Notion MAS L3 R
 
 Creates a new entry in the [🚒 MAS L3 Record](https://www.notion.so/34bd8cb0135347ebaaaaca863b755f62) Notion database for the **Merchant Platform** team.
 
-See [DATA-SOURCES.md](DATA-SOURCES.md) for all fixed IDs and references.
-See [EXAMPLE-OUTPUT.md](EXAMPLE-OUTPUT.md) for a real filled report — use it as the quality and formatting bar.
+See [DATA-SOURCES.md](references/DATA-SOURCES.md) for all fixed IDs and references.
+See [EXAMPLE-OUTPUT.md](references/EXAMPLE-OUTPUT.md) for a real filled report — use it as the quality and formatting bar.
 
 ## Step 1: Collect Inputs — Start Here
 
@@ -62,7 +62,7 @@ Use `mcp__notion__notion-get-users` to search both engineer names and get their 
 
 ### Step 3: Fetch Merchant Platform Incidents
 
-Query the Notion incidents database (see [DATA-SOURCES.md](DATA-SOURCES.md)) for records created between `START_DATETIME` and `END_DATETIME`.
+Query the Notion incidents database (see [DATA-SOURCES.md](references/DATA-SOURCES.md)) for records created between `START_DATETIME` and `END_DATETIME`.
 
 **Filter only incidents where the squad is Merchant Platform.** The squad field may be named "Squad", "Team", or "Affected Team" — inspect the schema first with `mcp__notion__notion-fetch` on the incidents DB.
 
@@ -72,7 +72,7 @@ Return each matching incident as its Notion page URL and title.
 
 ### Step 4: Fetch Merchant Platform P1 Remediation Subtasks
 
-Fetch the P1 Remediation parent task (see [DATA-SOURCES.md](DATA-SOURCES.md)) and get all its subtasks.
+Fetch the P1 Remediation parent task (see [DATA-SOURCES.md](references/DATA-SOURCES.md)) and get all its subtasks.
 
 Filter to subtasks that:
 1. Are **not completed**
@@ -87,9 +87,9 @@ Format each match as:
 
 ### Step 5: Fetch Bugs from Both Bug Boards
 
-Search both Merchant Platform bug boards (see [DATA-SOURCES.md](DATA-SOURCES.md)) for tasks created **or** modified during the rotation window (`START_DATETIME` → `END_DATETIME`).
+Search both Merchant Platform bug boards (see [DATA-SOURCES.md](references/DATA-SOURCES.md)) for tasks created **or** modified during the rotation window (`START_DATETIME` → `END_DATETIME`).
 
-Use `mcp__plugin_asana_asana__asana_search_tasks` twice (once per project), run in parallel. See [DATA-SOURCES.md](DATA-SOURCES.md) — **Asana Bug Boards** for the exact query and project GIDs.
+Use `mcp__plugin_asana_asana__asana_search_tasks` twice (once per project), run in parallel. See [DATA-SOURCES.md](references/DATA-SOURCES.md) — **Asana Bug Boards** for the exact query and project GIDs.
 
 Merge and deduplicate by task GID. Separate into:
 - **All bugs** → for the Bugs Backlog section
@@ -123,7 +123,7 @@ Ask: **"Which alerts should I deep-dive? Select the ones to include in the Deep 
 
 **6c) Fetch Slack context ONLY for selected alerts.**
 
-Read the Slack alerts channel for messages posted between `START_DATETIME` and `END_DATETIME`. See [DATA-SOURCES.md](DATA-SOURCES.md) — **Slack** for the channel ID and query patterns.
+Read the Slack alerts channel for messages posted between `START_DATETIME` and `END_DATETIME`. See [DATA-SOURCES.md](references/DATA-SOURCES.md) — **Slack** for the channel ID and query patterns.
 
 For each **user-selected** alert, read its Slack thread(s) inner messages and extract:
 - Context (what caused it)
@@ -147,13 +147,13 @@ Produce three outputs for the template:
   🟢 Enhancement: [optional — run-book updates or improvements made]
 ```
 
-See [EXAMPLE-OUTPUT.md](EXAMPLE-OUTPUT.md) — **Deep Dive Relevant Alerts** section for the exact format.
+See [EXAMPLE-OUTPUT.md](references/EXAMPLE-OUTPUT.md) — **Deep Dive Relevant Alerts** section for the exact format.
 
 If a selected alert has no matching Slack thread, mark it as `No solution documented in Slack`.
 
 ### Step 7: Fetch Tasks from Support Cases Board and L3 On Call Parent Task
 
-Fetch tasks from both sources in parallel. See [DATA-SOURCES.md](DATA-SOURCES.md) — **Asana Support Cases Board** and **Asana L3 On Call Parent Task** for project GIDs and queries.
+Fetch tasks from both sources in parallel. See [DATA-SOURCES.md](references/DATA-SOURCES.md) — **Asana Support Cases Board** and **Asana L3 On Call Parent Task** for project GIDs and queries.
 
 From both sources, collect **all tasks assigned to the logged-in user** during the rotation window. Merge and deduplicate by GID. Then partition into:
 
@@ -193,7 +193,7 @@ If the user requests changes, apply them to the preview and show the updated ver
 
 Use `mcp__notion__notion-create-pages` with:
 - **Parent:** `data_source_id: be808cce-e00c-446a-9503-1257c02bab90`
-- **Content:** See [TEMPLATE.md](TEMPLATE.md) — substitute all `[PLACEHOLDER]` values
+- **Content:** See [TEMPLATE.md](assets/TEMPLATE.md) — substitute all `[PLACEHOLDER]` values
 
 **Property mapping:**
 
