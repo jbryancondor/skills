@@ -26,15 +26,17 @@ boards.
 
 ## Daily status template
 
-The update must answer these three questions:
+The update must answer these four questions:
 
 ```
-*What did you accomplish on the previous business day?* What went well, what didn't go well.
+1. *What did you accomplish on the previous business day?* What went well, what didn't go well.
 
-*What are you working on today?* What is the most critical thing you should work on today?
+2. *What are you working on today?* What is the most critical thing you should work on today?
 
-*Are there any roadblocks or need help?* Ask for help in advance, don't wait until being
+3. *Are there any roadblocks or need help?* Ask for help in advance, don't wait until being
 fully blocked — if you are in doubt, ask for help preemptively.
+
+4. *Additional context to share with the team?*
 ```
 
 ---
@@ -47,9 +49,9 @@ Progress:
 - [ ] Step 2: Fetch Asana tasks across all three boards
 - [ ] Step 3: Show task list and ask user which to include
 - [ ] Step 4: Build answers for Q1 (yesterday) and Q2 (today)
-- [ ] Step 5: Infer roadblocks for Q3
+- [ ] Step 5: Infer roadblocks for Q3 and ask Q4
 - [ ] Step 6: Present draft and confirm with user
-- [ ] Step 7: Find or handle missing Slack thread
+- [ ] Step 7: Find Slack thread, show details, and confirm before posting
 - [ ] Step 8: Post the update
 ```
 
@@ -153,7 +155,9 @@ Same rule: only include the link when there is a real Asana task behind the item
 
 ---
 
-### Step 5: Infer Q3 — Roadblocks
+### Step 5: Infer Q3 — Roadblocks, and ask Q4
+
+**Q3 — Roadblocks:**
 
 Scan for signals of blockers across all tasks:
 - Tasks that are overdue (due_on < target_date) and still incomplete
@@ -164,8 +168,16 @@ Scan for signals of blockers across all tasks:
 Draft a short summary of what you found. This is speculative — you'll ask the user
 to confirm or edit before posting.
 
-If nothing looks blocked, say: *"No blockers inferred from Asana — is there anything
-you'd like to flag?"*
+If nothing looks blocked, default to: *"No blockers at this time."*
+
+**Q4 — Additional context:**
+
+Always ask the user explicitly:
+
+> "Is there any additional context you'd like to share with the team? (e.g. OOO notice,
+> FYIs, announcements — or just say 'None')"
+
+Wait for the user's response and carry it into Step 6.
 
 ---
 
@@ -176,19 +188,27 @@ Show the full draft in the chat using this exact format:
 ```
 📋 *Daily Status Draft — [target_date]*
 
-*What did you accomplish on the previous business day?*
-[Q1 content]
+*1. What did you accomplish on the previous business day?*
+• [Q1 item]
+• [Q1 item]
 
-*What are you working on today?*
-[Q2 content]
+*2. What are you working on today?*
+• [Q2 item]
+• [Q2 item]
 
-*Are there any roadblocks or need help?*
+*3. Are there any roadblocks or need help?*
 [Q3 content]
+
+*4. Additional context to share with the team?*
+[Q4 content]
 ```
+
+Each Q1 and Q2 item must be prefixed with `•` and start on its own line.
+Use `✅` for completed tasks and `🔄` for in-progress tasks in the bullet text.
 
 Then ask:
 
-> "Does this look right? You can confirm, edit any section, or add more context — especially for roadblocks. Once you say yes, I'll post it to the thread."
+> "Does this look right? You can confirm, edit any section, or add more context. Once you say yes, I'll post it to the thread."
 
 **Do not proceed to Step 7 until the user confirms.**
 
@@ -196,7 +216,7 @@ Apply any requested edits and show the updated draft. Repeat until confirmed.
 
 ---
 
-### Step 7: Find the Slack thread
+### Step 7: Find Slack thread, show details, and confirm before posting
 
 Search `C03DP13RJPP` (`#merchant-platform`) for a message matching
 `"Async Daily - [target_date]"` using `mcp__plugin_slack_slack__slack_search_public`
@@ -208,7 +228,19 @@ Async Daily - YYYY-MM-DD
 ```
 
 **If the thread is found:** extract its `ts` (timestamp) — this becomes the
-`thread_ts` for your reply.
+`thread_ts` for your reply. Then **show the thread details to the user and ask for
+confirmation before posting**:
+
+> "I'll post your update as a reply to this thread:
+>
+> **Thread:** `Async Daily - [target_date]`
+> **Posted by:** [bot/user name]
+> **Date:** [date and time]
+> **Link:** [slack thread URL]
+>
+> Shall I go ahead and post?"
+
+**Do not post until the user confirms.**
 
 **If the thread is NOT found:** do not guess or fabricate a link. Ask the user:
 
@@ -224,6 +256,8 @@ The `thread_ts` query parameter is the parent message timestamp. If it's absent,
 derive it from the `p` path segment by inserting a decimal after the 10th digit
 (e.g., `p1772719209132939` → `1772719209.132939`).
 
+Once the user confirms the thread, proceed to Step 8.
+
 ---
 
 ### Step 8: Post the update
@@ -234,7 +268,27 @@ If a thread was found, post the confirmed message as a reply using
 - `thread_ts: <parent_message_ts>`
 - `message: <confirmed_draft>`
 
-Format the Slack message using mrkdwn: use `*bold*` for the question labels and plain
-text for the answers. Keep the three-section structure intact.
+Format the Slack message using mrkdwn with this exact structure:
+
+```
+*1. What did you accomplish on the previous business day?*
+• ✅/🔄 [item] ([asana task](url))
+
+*2. What are you working on today?*
+• ✅/🔄 [item] ([asana task](url))
+
+*3. Are there any roadblocks or need help?*
+[answer]
+
+*4. Additional context to share with the team?*
+[answer]
+```
+
+Rules:
+- Use `*bold*` for all four numbered question labels
+- Each Q1/Q2 item on its own line prefixed with `•`
+- Use `✅` for completed tasks, `🔄` for in-progress
+- Only include Asana task links when backed by a real task
+- Blank line between each section for readability
 
 Confirm to the user with the message link once posted.
