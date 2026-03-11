@@ -22,14 +22,14 @@ summary table, and — once confirmed — creates Asana subtasks under a parent 
 | Resource | ID / Value |
 |---|---|
 | Slack channel | `C08JA2ANJ06` (review-request channel) |
-| Squad mentions to match | `@merchant-platform`, `@merchant-platform-backend`, `@merchant-platform-frontend` |
+| Squad group IDs | `S02UNHEKNFJ` (`@merchant-engineering`), `S02U14UUKK6` (`@merchant-platform-frontend`), `S03E7R2912N` (`@merchant-platform-backend`) |
 | Current user | Resolve dynamically via `slack_read_user_profile` (no args = logged-in user) |
 
 ## Workflow
 
 ```
 Progress:
-- [ ] Step 1: Resolve current user and target date
+- [ ] Step 1: Resolve current user and target date (group IDs are hardcoded)
 - [ ] Step 2: Read Slack messages and filter relevant ones
 - [ ] Step 3: Extract GitHub PR URLs from messages
 - [ ] Step 4: Fetch PR details via GitHub CLI
@@ -41,7 +41,7 @@ Progress:
 
 ---
 
-### Step 1: Resolve current user, target date, and squad subteam IDs
+### Step 1: Resolve current user and target date
 
 - Call `mcp__plugin_slack_slack__slack_read_user_profile` with no `user_id` to get
   the logged-in user's `user_id` and `display_name`.
@@ -50,25 +50,10 @@ Progress:
 - Compute the Unix timestamp for the start of the target date — this will be the
   `oldest` parameter when reading the channel.
 
-**Resolve squad subteam IDs** — Slack encodes user group mentions as
-`<!subteam^GROUPID>` in message text, so we need the numeric IDs for each squad
-handle. For each squad handle (`merchant-platform`, `merchant-platform-backend`,
-`merchant-platform-frontend`):
-
-1. Use `mcp__plugin_slack_slack__slack_search_public` to search for the handle name
-   in the `#pr-reviews` channel (e.g., `query: "merchant-platform in:#pr-reviews"`).
-2. From the results, extract the subteam IDs (`S...`) that appear near mentions of
-   that squad. Slack renders them as `<S0XXXXXXXX>` in search result text.
-3. Cross-reference: if the same subteam ID appears consistently alongside a squad
-   handle name, map it.
-
-If subteam IDs cannot be reliably resolved through search, fall back to reading
-recent messages from the channel (past 7 days) and matching subteam IDs that
-co-occur with known squad-related repos (e.g., repos under
-`AdelanteFinancialHoldings/platform` for backend). As a last resort, ask the user.
-
-Store the resolved mapping (e.g., `S039LUNTSEP → merchant-platform`) for use in
-Step 2.
+**Squad subteam IDs are hardcoded** — no resolution needed:
+- `S02UNHEKNFJ` → `@merchant-engineering`
+- `S02U14UUKK6` → `@merchant-platform-frontend`
+- `S03E7R2912N` → `@merchant-platform-backend`
 
 ---
 
@@ -84,10 +69,10 @@ If there are more messages, paginate using `cursor` until all messages for the
 target date are retrieved.
 
 **Filter criteria** — keep a message only if it matches ANY of these:
-1. Message text contains `<!subteam^ID>` where `ID` matches one of the resolved
-   squad subteam IDs from Step 1
+1. Message text contains `<!subteam^S02UNHEKNFJ>`, `<!subteam^S02U14UUKK6>`, or
+   `<!subteam^S03E7R2912N>`
 2. Message text contains `<@USER_ID>` where `USER_ID` matches the logged-in user
-3. Message text contains the literal strings `@merchant-platform`,
+3. Message text contains the literal strings `@merchant-engineering`,
    `@merchant-platform-backend`, or `@merchant-platform-frontend`
 
 Also check thread parent messages — if a thread parent matches, include it.
@@ -112,7 +97,11 @@ For each extracted URL, also record:
 - **Requester**: The Slack user who posted the message (from `user` field).
   Resolve their display name via `slack_read_user_profile`.
 - **Request date**: The message timestamp, converted to a human-readable date.
-- **Message permalink**: For reference.
+- **Slack message link**: The permalink to the original Slack message where the PR
+  review was requested. Construct it as
+  `https://app.slack.com/archives/C08JA2ANJ06/p<ts_without_dot>` (replace the dot
+  in the message `ts` with nothing). This link is shown in both the summary table
+  and in each Asana subtask.
 
 Deduplicate by PR URL — if the same PR appears in multiple messages, keep the
 earliest occurrence.
@@ -156,10 +145,10 @@ Present a formatted table to the user with all pending PRs:
 ```
 ## Pending PR Reviews — [target_date]
 
-| # | Requester | Short Description | PR Link | Requested | Size |
-|---|-----------|-------------------|---------|-----------|------|
-| 1 | @user1 | Fix payment retry logic | [org/repo#123](url) | 10:30 AM | +152 / -23 (175 lines) |
-| 2 | @user2 | Add merchant onboarding API | [org/repo#456](url) | 2:15 PM | +890 / -45 (935 lines) |
+| # | Requester | Short Description | PR Link | Slack Message | Requested | Size |
+|---|-----------|-------------------|---------|---------------|-----------|------|
+| 1 | @user1 | Fix payment retry logic | [org/repo#123](pr_url) | [View in Slack](slack_permalink) | 10:30 AM | +152 / -23 (175 lines) |
+| 2 | @user2 | Add merchant onboarding API | [org/repo#456](pr_url) | [View in Slack](slack_permalink) | 2:15 PM | +890 / -45 (935 lines) |
 
 Total: [N] PRs pending review
 ```
@@ -215,7 +204,8 @@ notes: |
   Pull Request Review
 
   PR: [PR title]
-  Link: [PR URL]
+  PR Link: [PR URL]
+  Slack Request: [Slack message permalink]
   Author (GitHub): [author.login]
   Requested by (Slack): [requester display name]
   Requested on: [request date and time]
@@ -223,8 +213,6 @@ notes: |
 
   Description:
   [Short description from PR body]
-
-  Slack message: [permalink to original Slack message]
 ```
 
 Use `notes` (plain text), not `html_notes`, to avoid XML parsing issues.
@@ -242,10 +230,10 @@ After all subtasks are created, present a summary:
 
 Parent task: [Parent task name] ([Asana link])
 
-| # | PR | Asana Task |
-|---|-----|------------|
-| 1 | [org/repo#123] — Fix payment retry | [View in Asana](https://app.asana.com/0/0/<task_gid>) |
-| 2 | [org/repo#456] — Add merchant API | [View in Asana](https://app.asana.com/0/0/<task_gid>) |
+| # | PR | Slack Request | Asana Task |
+|---|-----|---------------|------------|
+| 1 | [org/repo#123] — Fix payment retry | [View in Slack](slack_permalink) | [View in Asana](https://app.asana.com/0/0/<task_gid>) |
+| 2 | [org/repo#456] — Add merchant API | [View in Slack](slack_permalink) | [View in Asana](https://app.asana.com/0/0/<task_gid>) |
 
 Total: [N] tasks created successfully.
 ```
