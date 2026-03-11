@@ -8,8 +8,6 @@ description: >
   phrasing like "what PRs do I need to review", "create my PR review tasks",
   "pending PRs", or "PR reviews for today". By default fetches PRs from today.
 model: sonnet
-allowed-tools:
-  - Read
 ---
 
 # PR Review Tracker
@@ -35,8 +33,9 @@ Progress:
 - [ ] Step 4: Fetch PR details via GitHub CLI
 - [ ] Step 5: Build and present the pending PR table
 - [ ] Step 6: Ask user to confirm and provide parent Asana task
-- [ ] Step 7: Create Asana subtasks
-- [ ] Step 8: Show summary with Asana links
+- [ ] Step 7: Deduplicate against existing Asana subtasks
+- [ ] Step 8: Create Asana subtasks
+- [ ] Step 9: Show summary with Asana links
 ```
 
 ---
@@ -184,17 +183,43 @@ Once confirmed, ask for the parent Asana task:
 
 If the user says to search or just confirms the default name:
 1. Use `mcp__plugin_asana_asana__asana_typeahead_search` with
-   `resource_type: "task"` and `query: "Pull Request Revision"` (or
-   "Pull Request Revisiton" as alternate spelling)
+   `resource_type: "task"` and `query: "Pull Request Revision"`
 2. Present the results and ask the user to pick the correct one
 
 Extract the parent task GID from whatever the user provides.
 
 ---
 
-### Step 7: Create Asana subtasks
+### Step 7: Deduplicate against existing Asana subtasks
 
-For each confirmed pending PR, create a subtask using
+Users often run this skill daily, so the same PR may appear across multiple days
+until it's merged. Creating duplicate Asana tasks wastes time and clutters the
+task list, so check for existing tasks before creating new ones.
+
+Call `mcp__plugin_asana_asana__asana_get_task` on the parent task GID with
+`opt_fields: "subtasks,subtasks.name"` to fetch all existing subtask names in one
+call. If the response does not include subtask names (some Asana plans limit nested
+opt_fields), fall back to `mcp__plugin_asana_asana__asana_search_tasks` with
+`text: "repo#number"` for each pending PR instead.
+
+1. Collect every existing subtask name from the parent task.
+2. For each pending PR, build the `repo#number` identifier (e.g. `org/repo#123`).
+3. Check whether **any** existing subtask name contains `repo#number` (the naming
+   convention from Step 8). The match should be case-insensitive.
+4. If a match is found, mark that PR as **already tracked** and skip it:
+   > "Skipped [repo#number] — already exists as Asana task"
+5. Only proceed to create tasks for PRs that have no existing match.
+
+If **all** PRs already have Asana tasks, report:
+> "All [N] PRs already have Asana subtasks. No new tasks created."
+
+And stop the workflow.
+
+---
+
+### Step 8: Create Asana subtasks
+
+For each confirmed pending PR **that was not skipped in Step 7**, create a subtask using
 `mcp__plugin_asana_asana__asana_create_task` with:
 
 ```
@@ -215,13 +240,14 @@ notes: |
   [Short description from PR body]
 ```
 
-Use `notes` (plain text), not `html_notes`, to avoid XML parsing issues.
+Use `notes` (plain text), not `html_notes` — PR descriptions often contain angle
+brackets and special characters that break HTML parsing in the Asana API.
 
-Process all subtasks sequentially to avoid rate limits.
+Process subtasks sequentially (one at a time) to stay within Asana's rate limits.
 
 ---
 
-### Step 8: Show summary with Asana links
+### Step 9: Show summary with Asana links
 
 After all subtasks are created, present a summary:
 
