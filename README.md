@@ -20,6 +20,7 @@ mkdir -p ~/.claude/skills
 ln -s ~/bcd/project/skills/asana-task-creator-for-marketplace-cancellation ~/.claude/skills/asana-task-creator-for-marketplace-cancellation
 ln -s ~/bcd/project/skills/generating-l3-oncall-report ~/.claude/skills/generating-l3-oncall-report
 ln -s ~/bcd/project/skills/daily-status-publisher ~/.claude/skills/daily-status-publisher
+ln -s ~/bcd/project/skills/pr-review-tracker ~/.claude/skills/pr-review-tracker
 ```
 
 3. Reload your IDE/agent so it re-indexes local skills.
@@ -76,3 +77,16 @@ Path: `daily-status-publisher/SKILL.md`
 - Classifies tasks into: completed yesterday, working today, potential blockers.
 - Drafts all three standup questions and asks for confirmation before posting.
 - Posts as a reply to the daily thread in `#merchant-platform`; asks the user to paste the message link if the thread isn't found automatically.
+
+### 4) `pr-review-tracker`
+
+Path: `pr-review-tracker/SKILL.md`
+
+**Purpose:** Scan Slack for PR review requests tagged to the squad and create Asana subtasks for each pending review.
+
+**Includes:**
+- Reads messages from `C08JA2ANJ06` filtering by squad mentions (`@merchant-platform`, `@merchant-platform-backend`, `@merchant-platform-frontend`) or direct user tags.
+- Extracts GitHub PR links and fetches details via `gh` CLI (title, description, size, state).
+- Filters out merged PRs and presents a summary table of pending reviews.
+- After user confirmation, creates Asana subtasks under a parent task (e.g., "Pull Request Revision").
+- Shows final summary with Asana task links.
