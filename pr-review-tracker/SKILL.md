@@ -27,27 +27,34 @@ summary table, and — once confirmed — creates Asana subtasks under a parent 
 
 ```
 Progress:
-- [ ] Step 1: Resolve current user and target date (group IDs are hardcoded)
-- [ ] Step 2: Read Slack messages and filter relevant ones
-- [ ] Step 3: Extract GitHub PR URLs from messages
-- [ ] Step 4: Fetch PR details via GitHub CLI
-- [ ] Step 5: Build and present the pending PR table
-- [ ] Step 6: Ask user to confirm and provide parent Asana task
-- [ ] Step 7: Deduplicate against existing Asana subtasks
-- [ ] Step 8: Create Asana subtasks
-- [ ] Step 9: Show summary with Asana links
+- [ ] Step 1: Resolve current user and target date(s)
+- [ ] Step 2: Collect PR data (parallel subagents if multi-day)
+  - [ ] Step 2a: Read Slack messages and filter relevant ones
+  - [ ] Step 2b: Extract GitHub PR URLs from messages
+  - [ ] Step 2c: Fetch PR details via GitHub CLI
+- [ ] Step 3: Merge results and deduplicate across days
+- [ ] Step 4: Build and present the pending PR table
+- [ ] Step 5: Ask user to confirm and provide parent Asana task
+- [ ] Step 6: Deduplicate against existing Asana subtasks
+- [ ] Step 7: Create Asana subtasks
+- [ ] Step 8: Show summary with Asana links
 ```
 
 ---
 
-### Step 1: Resolve current user and target date
+### Step 1: Resolve current user and target date(s)
 
 - Call `mcp__plugin_slack_slack__slack_read_user_profile` with no `user_id` to get
   the logged-in user's `user_id` and `display_name`.
-- **Target date** = today (`YYYY-MM-DD`) unless the user specifies a different date
-  or range.
-- Compute the Unix timestamp for the start of the target date — this will be the
-  `oldest` parameter when reading the channel.
+- **Target date(s)**: Determine what the user is asking for:
+  - **Single day** (default): today (`YYYY-MM-DD`), or a specific date the user
+    mentions.
+  - **Multi-day range**: The user may say "last 3 days", "this week",
+    "March 5 to March 10", etc. Parse the request into a list of individual dates
+    (`YYYY-MM-DD`). For "last N days", generate N dates ending at today. For
+    explicit ranges, generate every date from start to end inclusive.
+- For each date, compute the Unix timestamps for the start and end of that day —
+  these will be the `oldest` and `latest` parameters when reading the channel.
 
 **Squad subteam IDs are hardcoded** — no resolution needed:
 - `S02UNHEKNFJ` → `@merchant-engineering`
@@ -56,12 +63,79 @@ Progress:
 
 ---
 
-### Step 2: Read Slack messages and filter relevant ones
+### Step 2: Collect PR data (parallel subagents if multi-day)
+
+This step gathers Slack messages, extracts PR URLs, and fetches GitHub details.
+The strategy depends on whether the request covers one day or multiple days.
+
+#### Single-day path
+
+If there is only **one target date**, execute Steps 2a → 2b → 2c sequentially in
+the main agent (no subagent needed).
+
+#### Multi-day path (parallel subagents)
+
+If there are **two or more target dates**, launch one **Agent subagent per day**,
+all in parallel. Each subagent independently performs Steps 2a → 2b → 2c for its
+assigned date.
+
+Use the `Agent` tool with `subagent_type: "general-purpose"` and
+`model: "sonnet"`. Launch **all subagents in a single message** so they run
+concurrently. Each subagent prompt must include:
+
+1. The specific date to process (as `YYYY-MM-DD`)
+2. The channel ID: `C08JA2ANJ06`
+3. The logged-in user's `user_id` (resolved in Step 1)
+4. The squad subteam IDs: `S02UNHEKNFJ`, `S02U14UUKK6`, `S03E7R2912N`
+5. The full instructions for Steps 2a, 2b, and 2c below
+6. Instruction to return a structured summary: a list of PR records with all
+   fields from Steps 2b and 2c
+
+**Example subagent prompt template:**
+
+```
+Scan Slack channel C08JA2ANJ06 for PR review requests on DATE.
+
+Context:
+- Logged-in user ID: USER_ID
+- Squad subteam IDs: S02UNHEKNFJ, S02U14UUKK6, S03E7R2912N
+- Unix timestamp range: oldest=OLDEST, latest=LATEST
+
+Instructions:
+1. Read messages from channel C08JA2ANJ06 using slack_read_channel with
+   oldest=OLDEST, latest=LATEST, limit=100. Paginate if needed.
+2. Keep messages that mention any of: <!subteam^S02UNHEKNFJ>,
+   <!subteam^S02U14UUKK6>, <!subteam^S03E7R2912N>, <@USER_ID>,
+   or literal strings @merchant-engineering, @merchant-platform-backend,
+   @merchant-platform-frontend.
+3. Extract GitHub PR URLs matching: https://github.com/.../pull/NNN
+4. For each PR URL, record: requester (resolve display name via
+   slack_read_user_profile), request date, Slack permalink
+   (https://app.slack.com/archives/C08JA2ANJ06/p<ts_without_dot>).
+5. Deduplicate by PR URL (keep earliest).
+6. For each unique PR, run:
+   gh pr view <URL> --json title,body,additions,deletions,state,mergedAt,author,url,number
+7. Filter out PRs where mergedAt is non-empty or state == "MERGED".
+8. Create a short description (~100 chars) from the PR body.
+
+Return a structured list of PR records. For each PR include:
+- pr_url, repo, number, title, short_description, author_login
+- additions, deletions, state
+- requester_name, request_date, slack_permalink
+If no relevant PRs found, return an empty list.
+```
+
+Wait for all subagents to complete, then collect their results into a single list.
+
+---
+
+#### Step 2a: Read Slack messages and filter relevant ones
 
 Read messages from channel `C08JA2ANJ06` using
 `mcp__plugin_slack_slack__slack_read_channel` with:
 - `channel_id: "C08JA2ANJ06"`
 - `oldest: <start_of_target_date_unix_timestamp>`
+- `latest: <end_of_target_date_unix_timestamp>`
 - `limit: 100`
 
 If there are more messages, paginate using `cursor` until all messages for the
@@ -78,7 +152,7 @@ Also check thread parent messages — if a thread parent matches, include it.
 
 ---
 
-### Step 3: Extract GitHub PR URLs from messages
+#### Step 2b: Extract GitHub PR URLs from messages
 
 For each filtered message, extract GitHub pull request URLs using this regex
 pattern:
@@ -107,7 +181,7 @@ earliest occurrence.
 
 ---
 
-### Step 4: Fetch PR details via GitHub CLI
+#### Step 2c: Fetch PR details via GitHub CLI
 
 For each unique PR URL, run:
 
@@ -137,12 +211,23 @@ are already completed and not pending review.
 
 ---
 
-### Step 5: Build and present the pending PR table
+### Step 3: Merge results and deduplicate across days
+
+If the request covered multiple days, the same PR may have been requested on more
+than one day (e.g., a re-ping). Merge all PR records from all subagents into a
+single list and deduplicate by PR URL — keep the **earliest** occurrence (oldest
+request date).
+
+For single-day requests, this step is a no-op (already deduplicated in Step 2b).
+
+---
+
+### Step 4: Build and present the pending PR table
 
 Present a formatted table to the user with all pending PRs:
 
 ```
-## Pending PR Reviews — [target_date]
+## Pending PR Reviews — [target_date or date_range]
 
 | # | Requester | Short Description | PR Link | Slack Message | Requested | Size |
 |---|-----------|-------------------|---------|---------------|-----------|------|
@@ -158,14 +243,14 @@ Total: [N] PRs pending review
 - Large: > 500 lines changed
 
 If no pending PRs are found, report:
-> "No pending PR review requests found for [target_date] in the channel. Either
-> no reviews were requested today, or all requested PRs have already been merged."
+> "No pending PR review requests found for [target_date/range] in the channel.
+> Either no reviews were requested, or all requested PRs have already been merged."
 
 Stop the workflow here if there are no pending PRs.
 
 ---
 
-### Step 6: Ask user to confirm and provide parent Asana task
+### Step 5: Ask user to confirm and provide parent Asana task
 
 First, ask the user to confirm the information:
 
@@ -190,7 +275,7 @@ Extract the parent task GID from whatever the user provides.
 
 ---
 
-### Step 7: Deduplicate against existing Asana subtasks
+### Step 6: Deduplicate against existing Asana subtasks
 
 Users often run this skill daily, so the same PR may appear across multiple days
 until it's merged. Creating duplicate Asana tasks wastes time and clutters the
@@ -205,7 +290,7 @@ opt_fields), fall back to `mcp__plugin_asana_asana__asana_search_tasks` with
 1. Collect every existing subtask name from the parent task.
 2. For each pending PR, build the `repo#number` identifier (e.g. `org/repo#123`).
 3. Check whether **any** existing subtask name contains `repo#number` (the naming
-   convention from Step 8). The match should be case-insensitive.
+   convention from Step 7). The match should be case-insensitive.
 4. If a match is found, mark that PR as **already tracked** and skip it:
    > "Skipped [repo#number] — already exists as Asana task"
 5. Only proceed to create tasks for PRs that have no existing match.
@@ -217,9 +302,9 @@ And stop the workflow.
 
 ---
 
-### Step 8: Create Asana subtasks
+### Step 7: Create Asana subtasks
 
-For each confirmed pending PR **that was not skipped in Step 7**, create a subtask using
+For each confirmed pending PR **that was not skipped in Step 6**, create a subtask using
 `mcp__plugin_asana_asana__asana_create_task` with:
 
 ```
@@ -247,7 +332,7 @@ Process subtasks sequentially (one at a time) to stay within Asana's rate limits
 
 ---
 
-### Step 9: Show summary with Asana links
+### Step 8: Show summary with Asana links
 
 After all subtasks are created, present a summary:
 
