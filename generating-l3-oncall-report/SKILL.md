@@ -1,6 +1,8 @@
 ---
 name: generating-l3-oncall-report
 description: Creates the weekly L3 on-call handoff report in the Notion MAS L3 Record database. Use when the user asks to create, generate, write, or fill the L3 on-call report, oncall handover.
+model: haiku
+allowed-tools: Read, Grep, Glob
 ---
 
 # L3 On-Call Report Generator
